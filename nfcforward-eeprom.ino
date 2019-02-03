@@ -23,31 +23,31 @@ EthernetServer server(80);
 String serverAddress;
 boolean useDHCP = true;
 boolean configured = false;
+const boolean debugEth = false;
 #define SD_SS_PIN 4
 //#define RESETCONFIG true
 #define RST_PIN         9          // Configurable, see typical pin layout above
 #define SS_PIN          7         // Configurable, see typical pin layout above
 #define DEBUG true
-
+//#define WAITSERIAL true
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
-String request;
 
 const byte default_id[4] = {192, 168, 1, 4};
-const uint8_t default_mac[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+const uint8_t default_mac[6] = {0x46, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 const uint8_t default_subnet[4] = {255, 255, 255, 0};
 const uint8_t default_gateway[4] = {192, 168, 1, 1};
 const uint8_t default_dnsserver[4] = {192, 168, 1, 1};
-const uint8_t default_reqestlen = 0;
+const uint8_t default_serverip[4] = {192, 168, 1, 67};
+const uint8_t default_reqestlen = 36;
+const String default_request = "/log.php?readerId=%RID%&cardId=%CID%";
 char charArrayOfServerAddress[16];
 String stringOfMACAddress;
 
 void readConfig() {
   EEPROM_readAnything(0, conf);
   for (int i = 0; i < conf.requestlen; i++) {
-    Serial.print("request:");
     char c = (char)EEPROM.read(sizeof(conf) + i);
-    Serial.print(c);
-    request += c;
+    Serial.print(c);    
   }
   Serial.println();
   sprintf(charArrayOfServerAddress, "%d.%d.%d.%d", conf.serverip[0], conf.serverip[1], conf.serverip[2], conf.serverip[3]);
@@ -92,7 +92,10 @@ void printConfig(NetConfig oconf) {
   Serial.print(oconf.requestlen);
   Serial.println("',");
   Serial.print(F("request:'"));
-  Serial.print(request);
+  for (int i = 0; i < conf.requestlen; i++) {
+    char c = (char)EEPROM.read(sizeof(conf) + i);
+    Serial.print(c);    
+  }
   Serial.println("'\n}");
 }
 
@@ -104,8 +107,12 @@ void resetConfig() {
   memcpy(conf.subnet, default_subnet, 4);
   memcpy(conf.gateway, default_gateway, 4);
   memcpy(conf.dnsserver, default_dnsserver, 4);
+  memcpy(conf.serverip, default_serverip, 4);
   conf.requestlen = default_reqestlen;
   EEPROM_writeAnything(0, conf);
+  for (int i = 0; i < conf.requestlen; i++) {
+    EEPROM.write(sizeof(conf) + i, default_request.charAt(i));
+  }
 }
 
 void initRC522() {
@@ -120,7 +127,6 @@ void initEthernet() {
     Ethernet.begin(conf.mac);
   else
     Ethernet.begin(conf.mac, conf.ip, conf.dnsserver, conf.gateway, conf.subnet);
-  server.begin();
 #ifdef DEBUG
   Serial.print("reader ip: ");
   Serial.println(Ethernet.localIP());
@@ -144,14 +150,14 @@ void setup() {
   resetConfig();
 #endif
 
-#ifdef DEBUG
+#ifdef WAITSERIAL
   while (!Serial) {
     ;
   }
 #endif
   initPins();
   readConfig();
-  if (String(conf.state).startsWith("run")) {
+  if (String(conf.state).startsWith("run") || debugEth) {
     initEthernet();
     initRC522();
     configured = true;
@@ -202,8 +208,18 @@ void loop() {
 #endif
       if (webClient.connect(conf.serverip, 80)) {
         webClient.print(F("GET "));
-        request.replace("%RID%",stringOfMACAddress);
-        request.replace("%CID%",cardId);
+        char request[conf.requestlen];
+        for (int i = 0; i < conf.requestlen; i++) {
+          request[i]= (char)EEPROM.read(sizeof(conf) + i);    
+        }
+
+        //TODO Replace parameters
+        String req = String(request);
+        req.replace("%RID%",stringOfMACAddress);
+        req.replace("%CID%",cardId);
+        
+        Serial.print(F("Processed log request:"));
+        Serial.println(req);
         webClient.print(request);        
         webClient.println(F(" HTTP/1.1"));
         webClient.print(F("Host: "));
@@ -237,10 +253,13 @@ void loop() {
         EEPROM_writeAnything(0, conf);
         String reqStr;
         for (int i = 0; i < conf.requestlen; i++) {
-          EEPROM.write(sizeof(conf) + i, Serial.read());
+          char c = Serial.read();
+          Serial.print(c);
+          EEPROM.write(sizeof(conf) + i, c);
         }
-        printConfig(conf);
+        readConfig();
         initEthernet();
+        configured = true;
       } else {
         Serial.print(F("unknow command ["));
         Serial.print(conf.state);
