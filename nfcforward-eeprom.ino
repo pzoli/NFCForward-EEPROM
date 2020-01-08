@@ -26,7 +26,7 @@ boolean configured = false;
 //#define RESETCONFIG true
 #define RST_PIN         9          // Configurable, see typical pin layout above
 #define SS_PIN          7         // Configurable, see typical pin layout above
-#define DEBUG true
+//#define DEBUG true
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
 String defRequest = "/log.php?readerId=%RID%&cardId=%CID%";
@@ -156,17 +156,15 @@ void setup() {
 EthernetClient webClient;
 String command;
 bool dataSent = false;
-bool firstLine = true;
 String webResult = "";
 
 void processRequest() {
-  #ifdef DEBUG
+//#ifdef DEBUG
       Serial.println();
       Serial.println(F("webclient stop."));
-      Serial.println();
       Serial.println(F("webresult:"));
       Serial.println(webResult);
-#endif
+//#endif
       int resultStartIdx = webResult.indexOf("{\"");
       if (resultStartIdx > -1) {
         int resultEndIdx = webResult.indexOf("\"}");
@@ -185,27 +183,36 @@ void processRequest() {
           Serial.println(allowed);
 #endif    
           if (allowed == "t") {
-#ifdef DEBUG
+//#ifdef DEBUG
             Serial.println();
             Serial.println(F("Beengedem"));
-#endif    
+//#endif    
           } else {
-#ifdef DEBUG
+//#ifdef DEBUG
             Serial.println();
             Serial.println(F("Kitiltom"));
-#endif                      
+//#endif                      
           }
         }        
       }
       webResult = "";
 }
+boolean inJSON = false;
 void loop() {
   if (configured) {
     if (webClient.available()) {
       char buff[64];
       int cnt = webClient.read(buff, sizeof(buff));
       for(int i=0;i<cnt;i++) {
-        webResult += buff[i];
+        if (buff[i] == '{' && !inJSON) {
+          inJSON = true;
+        } else if (buff[i] == '}' && inJSON) {
+          inJSON = false;
+          webResult += buff[i];
+        }
+        if (inJSON) {
+          webResult += buff[i];
+        }
       }
 #ifdef DEBUG
       Serial.write(buff, cnt);
