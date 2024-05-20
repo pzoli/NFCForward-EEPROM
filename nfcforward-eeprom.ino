@@ -29,7 +29,7 @@ boolean configured = false;
 //#define DEBUG true
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // Create MFRC522 instance
-String defRequest = "/log.php?readerId=%RID%&cardId=%CID%";
+String defRequest = "/forras-admin/rest/createNFCLog?readerid=%RID%&crfid=%CID%&type=RF1";
 String request = defRequest;
 
 const byte default_id[4] = {192, 168, 1, 14};
@@ -240,7 +240,7 @@ void loop() {
       Serial.print(F("cardid:"));
       Serial.println(cardId);
 #endif
-      if (webClient.connect(conf.serverip, 80)) {
+      if (webClient.connect(conf.serverip, 8080)) {
         webClient.print(F("GET "));
         request.replace(F("%RID%"),stringOfMACAddress);
         request.replace(F("%CID%"),cardId);
